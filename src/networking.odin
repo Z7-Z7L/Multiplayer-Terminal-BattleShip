@@ -5,6 +5,7 @@ import "core:net"
 import "core:strconv"
 import "core:strings"
 import "core:time"
+import "core:thread"
 
 PlaceShipCommand :: struct {
   ship_type: int, // 0-4
@@ -84,7 +85,7 @@ ExecuteCommand :: proc(com: Command, p1,p2: ^Player, input_player: int) -> Error
 	return .NONE;
 }
 
-PORT :: 8080;
+PORT :: 25565;
 endpoint: net.Endpoint;
 
 GetRadminVpnIp :: proc() -> net.IP4_Address{
@@ -185,4 +186,23 @@ UpdateNetworking :: proc(page: Page, p1,p2:^Player) {
 		}
 	}
 
+}
+
+PORT_DISCOVERY :: 4445;
+
+SpawnBroadcastBeacon :: proc() {
+	thread.create_and_start(proc() {
+		broadcast_addr := net.IP4_Address{255,255,255,255}
+		discovery_endpoint := net.Endpoint{address = broadcast_addr, port = PORT_DISCOVERY};
+
+		sock, _ := net.make_bound_udp_socket(net.IP4_Any, 0);
+		net.set_option(sock, .Broadcast, true);
+
+		for {
+			msg := "BATTLESHIP_HOST_ALIVE";
+			net.send_udp(sock, transmute([]byte)msg, discovery_endpoint);
+
+			time.sleep(1000000);
+		}
+	})
 }

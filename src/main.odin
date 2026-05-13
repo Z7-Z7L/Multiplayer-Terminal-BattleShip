@@ -7,18 +7,11 @@ import "core:fmt"
 import "core:time"
 import "core:net"
 
-// Make it when you run the game in windows it runs on PowerShell instead of CMD
-
-/*
-	Each user in code sees him self as p1 and the other user as p2, ONLY IN CODE
-	in screen aka current_turn the host will be Player1 and the client will be Player2
-*/
-
 ORANGE_COLOR :: t.Color_RGB{250, 160, 30}
 
 game: GameState;
 
-Page :: enum {MainMenu, HostMenu, JoinMenu, Gameplay}
+Page :: enum {MainMenu, RadminHostMenu, RadminJoinMenu, LocalHostMenu, LocalJoinMenu, Gameplay}
 
 main :: proc() {
 	game.current_player = .Player1;
@@ -46,16 +39,27 @@ main :: proc() {
 				InputMainMenu(&s, &page, input_ok ? input.key : .None);
 				DrawMainMenu(&s);
 			}
-			case .HostMenu: {
+			case .RadminHostMenu: {
 				user_type = .Host;
-				DrawHostMenu(&s);
+				DrawRadminHostMenu(&s);
 				t.blit(&s);
-				UpdateHostMenu(&page, &s);
+				UpdateRadminHostMenu(&page, &s);
 			}
-			case .JoinMenu: {
+			case .RadminJoinMenu: {
 				user_type = .Client;
-				InputJoinMenu(&s, &page, input_ok ? input.key : .None);
-				DrawJoinMenu(&s);
+				InputRadminJoinMenu(&s, &page, input_ok ? input.key : .None);
+				DrawRadminJoinMenu(&s);
+			}
+			case .LocalHostMenu: {
+				user_type = .Host;
+				DrawLocalHostMenu(&s);
+				t.blit(&s);
+				UpdateLocalHostMenu(&page, &s);
+			}
+			case .LocalJoinMenu: {
+				user_type = .Client;
+				UpdateLocalJoinMenu(&s, &page);
+				DrawLocalJoinMenu(&s);
 			}
 			case .Gameplay: {
 				if (game.phase == .Battle) {
@@ -87,32 +91,44 @@ DrawMainMenu :: proc(s: ^t.Screen) {
 	// Host & Join Options
 	t.set_color_style(s, .Blue, nil);
 	t.move_cursor(s, 1, 0);
-	t.write(s, "1: Host");
+	t.write(s, "1: Radmin Host");
 
 	t.set_color_style(s, .Cyan, nil);
 	t.move_cursor(s, 2, 0);
-	t.write(s, "2: Join");
+	t.write(s, "2: Radmin Join");
+
+	t.set_color_style(s, ORANGE_COLOR, nil);
+	t.move_cursor(s, 3, 0);
+	t.write(s, "3: Local Host");
+
+	t.set_color_style(s, .Yellow, nil);
+	t.move_cursor(s, 4, 0);
+	t.write(s, "4: Local Join");
 
 	t.reset_styles(s);
 }
 InputMainMenu :: proc(s: ^t.Screen, page: ^Page, key: Maybe(t.Key)) {
 	k, ok := key.?;
 
-	if (key == .Num_1) {page^ = .HostMenu}
-	if (key == .Num_2) {page^ = .JoinMenu}
+	if (key == .Num_1) {page^ = .RadminHostMenu}
+	if (key == .Num_2) {page^ = .RadminJoinMenu}
+	if (key == .Num_3) {page^ = .LocalHostMenu}
+	if (key == .Num_4) {page^ = .LocalJoinMenu}
 	time.sleep(1000000);
 }
 
 host_key:string;
 listener: net.TCP_Socket;
 host_client_sock: net.TCP_Socket;
-DrawHostMenu :: proc(s: ^t.Screen) {
+
+// Radmin Multiplayer
+DrawRadminHostMenu :: proc(s: ^t.Screen) {
 	t.set_text_style(s, {.Bold});
 
 	// Title
 	t.set_color_style(s, .Blue, nil);
 	t.move_cursor(s, 0, 0);
-	t.write(s, "===H O S T - M E N U===");
+	t.write(s, "===R A D M I N - H O S T - M E N U===");
 
 	// Generate Join Key
 	// Try to get the key for 5 times
@@ -132,7 +148,7 @@ DrawHostMenu :: proc(s: ^t.Screen) {
 
 	t.reset_styles(s);
 }
-UpdateHostMenu :: proc(page: ^Page, s: ^t.Screen) {
+UpdateRadminHostMenu :: proc(page: ^Page, s: ^t.Screen) {
 	if (listener == 0 && host_client_sock == 0) {
 		listener, _ = net.listen_tcp(endpoint);
 		net.set_blocking(listener, false);
@@ -154,16 +170,16 @@ UpdateHostMenu :: proc(page: ^Page, s: ^t.Screen) {
 // either by setting it to 0
 client_key_buffer: [8]u8;
 client_key_pressed_num: int;
-DrawJoinMenu :: proc(s: ^t.Screen) {
+DrawRadminJoinMenu :: proc(s: ^t.Screen) {
 	t.set_text_style(s, {.Bold});
 
 	// Title
 	t.set_color_style(s, .Cyan, nil);
 	t.move_cursor(s, 0, 0);
-	t.write(s, "===J O I N - M E N U===");
+	t.write(s, "===R A D M I N - J O I N - M E N U===");
 
 	t.set_color_style(s, .Green, nil);
-	t.move_cursor(s, 0, 0);
+	t.move_cursor(s, 1, 0);
 	text := fmt.tprintf("Enter Join Key: %v-%v-%v-%v",
 		string(client_key_buffer[:2]), string(client_key_buffer[2:4]),
 		string(client_key_buffer[4:6]), string(client_key_buffer[6:8]));
@@ -171,7 +187,7 @@ DrawJoinMenu :: proc(s: ^t.Screen) {
 
 	t.reset_styles(s);
 }
-InputJoinMenu :: proc(s: ^t.Screen, page: ^Page, key: Maybe(t.Key)) {
+InputRadminJoinMenu :: proc(s: ^t.Screen, page: ^Page, key: Maybe(t.Key)) {
 	k, ok := key.?;
 
 	// Convert client_key_buffer to net.IP4_Address
@@ -209,6 +225,93 @@ InputJoinMenu :: proc(s: ^t.Screen, page: ^Page, key: Maybe(t.Key)) {
 		client_key_buffer[client_key_pressed_num] = pressed_key;
 		client_key_pressed_num += 1;
 	}
+	time.sleep(1000000);
+}
+
+// Local Multiplayer
+DrawLocalHostMenu :: proc(s: ^t.Screen) {
+	t.set_text_style(s, {.Bold});
+
+	// Title
+	t.set_color_style(s, ORANGE_COLOR, nil);
+	t.move_cursor(s, 0, 0);
+	t.write(s, "===L O C A L - H O S T - M E N U===");
+
+	t.set_color_style(s, .Green, nil);
+	t.move_cursor(s, 1, 0);
+	t.write(s, "Waiting for client to join...");
+
+	t.reset_styles(s);
+}
+UpdateLocalHostMenu :: proc(page: ^Page, s: ^t.Screen) {
+	if (listener == 0 && host_client_sock == 0) {
+		endpoint = {net.IP4_Any, PORT};
+		listener, _ = net.listen_tcp(endpoint);
+		net.set_blocking(listener, false);
+
+		SpawnBroadcastBeacon();
+	}
+
+	sock, _,err := net.accept_tcp(listener);
+	if (err == nil) {
+		host_client_sock = sock;
+		net.set_blocking(host_client_sock, false);
+
+		// FOR TEST ONLY
+		append(&game.log, "Host Is Connected!");
+		page^ = .Gameplay;
+	}
+	time.sleep(1000000);
+}
+
+disc_sock_created: bool;
+disc_sock: net.UDP_Socket;
+disc_sock_err: net.Network_Error;
+DrawLocalJoinMenu :: proc(s: ^t.Screen) {
+	t.set_text_style(s, {.Bold});
+
+	// Title
+	t.set_color_style(s, .Yellow, nil);
+	t.move_cursor(s, 0, 0);
+	t.write(s, "===L O C A L - J O I N - M E N U===");
+
+	t.set_color_style(s, .Green, nil);
+	t.move_cursor(s, 1, 0);
+	t.write(s, "Connecting to host...");
+
+	t.reset_styles(s);
+}
+UpdateLocalJoinMenu :: proc(s: ^t.Screen, page: ^Page) {
+	if (!disc_sock_created) {
+		disc_sock, disc_sock_err = net.make_bound_udp_socket(net.IP4_Any, PORT_DISCOVERY);
+		net.set_blocking(disc_sock, false);
+
+		if (disc_sock_err == net.Create_Socket_Error.None || disc_sock_err == nil) {
+			disc_sock_created = true;
+		}
+	}
+
+
+	buf: [128]u8;
+	n, remote_ep, recv_err := net.recv_udp(disc_sock, buf[:]);
+
+
+	if (recv_err == nil && n > 0) {
+		if (string(buf[:n]) == "BATTLESHIP_HOST_ALIVE") {
+			host_ip := remote_ep.address.(net.IP4_Address);
+			game_ep := net.Endpoint{address = host_ip, port = PORT};
+
+			sock, dial_err := net.dial_tcp(game_ep);
+			if (dial_err == nil) {
+				host_client_sock = sock;
+				net.set_blocking(host_client_sock, false);
+				// FOR TEST ONLY
+				append(&game.log, "Client Is Connected!");
+				page^ = .Gameplay;
+			}
+		}
+	}
+
 	time.sleep(1000000);
 }
 
