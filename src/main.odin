@@ -22,11 +22,6 @@ game: GameState;
 Page :: enum {MainMenu, HostMenu, JoinMenu, Gameplay}
 
 main :: proc() {
-	// Force UTF-8 output on Windows
-	when ODIN_OS == .Windows {
-		windows.SetConsoleOutputCP(windows.CODEPAGE.UTF8);
-	}
-
 	game.current_player = .Player1;
 
 	page: Page = .MainMenu;
@@ -247,11 +242,16 @@ DrawGameplay :: proc(p: Player, s: ^t.Screen) {
 		}
 
 		// Tiles
-		t.set_color_style(s, .Blue, nil)
 		for row, i in p.ocean_grid {
 			t.move_cursor(s, uint(i + 5), 3)
 
-			for r, index in row {
+			for r, _ in row {
+				if (r == WATER) {t.set_color_style(s, .Blue, nil)}
+				if (r == SHIP) {t.set_color_style(s, .Green, nil)}
+				if (r == HIT)  {t.set_color_style(s, .Yellow, nil)}
+				if (r == SUNK) {t.set_color_style(s, .Red, nil)}
+				if (r == MISS) {t.set_color_style(s, .Magenta, nil)}
+
 				t.write(s, r)
 				t.write(s, ' ')
 			}
@@ -290,7 +290,12 @@ DrawGameplay :: proc(p: Player, s: ^t.Screen) {
 		for row, i in p.target_grid {
 			t.move_cursor(s, uint(i + 5), 40)
 
-			for r, index in row {
+			for r, _ in row {
+				if (r == WATER) {t.set_color_style(s, .Blue, nil)}
+				if (r == HIT)  {t.set_color_style(s, .Yellow, nil)}
+				if (r == SUNK) {t.set_color_style(s, .Red, nil)}
+				if (r == MISS) {t.set_color_style(s, .Magenta, nil)}
+
 				t.write(s, r)
 				t.write(s, ' ')
 			}
@@ -305,17 +310,27 @@ DrawGameplay :: proc(p: Player, s: ^t.Screen) {
 			"╚═════════════════════════════════════╝",
 		)
 
+		t.set_color_style(s, .Blue, nil)
 		t.move_cursor(s, 4, 72)
 		t.write(s, "≈: Water")
+
+		t.set_color_style(s, .Green, nil)
 		t.move_cursor(s, 4, 84)
 		t.write(s, "S: Ship")
+
+		t.set_color_style(s, .Yellow, nil)
 		t.move_cursor(s, 4, 95)
 		t.write(s, "H: Hit")
+
+		t.set_color_style(s, .Magenta, nil)
 		t.move_cursor(s, 6, 76)
 		t.write(s, "M: Miss")
+
+		t.set_color_style(s, .Red, nil)
 		t.move_cursor(s, 6, 90)
 		t.write(s, "X: Sunk")
 
+		t.set_color_style(s, .Yellow, nil)
 		for i in 0 ..< 4 {
 			t.move_cursor(s, 3 + uint(i), 67)
 			t.write(s, '║')
@@ -375,8 +390,11 @@ DrawGameplay :: proc(p: Player, s: ^t.Screen) {
 		turn_text := fmt.aprintf("Turn: %i", game.turn)
 		current_player_text := fmt.aprintf("Current Player: %v", game.current_player)
 
+		t.set_color_style(s, .Blue, nil)
 		t.move_cursor(s, 1, 83)
 		t.write(s, turn_text)
+
+		t.set_color_style(s, .Cyan, nil)
 		t.move_cursor(s, 2, 75)
 		t.write(s, current_player_text)
 
