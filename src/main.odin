@@ -4,8 +4,7 @@ import t "termcl"
 import tb "termcl/term"
 
 import "core:fmt"
-import "core:sys/windows"
-
+import "core:time"
 import "core:net"
 
 // Make it when you run the game in windows it runs on PowerShell instead of CMD
@@ -101,6 +100,7 @@ InputMainMenu :: proc(s: ^t.Screen, page: ^Page, key: Maybe(t.Key)) {
 
 	if (key == .Num_1) {page^ = .HostMenu}
 	if (key == .Num_2) {page^ = .JoinMenu}
+	time.sleep(1000000);
 }
 
 host_key:string;
@@ -147,6 +147,7 @@ UpdateHostMenu :: proc(page: ^Page, s: ^t.Screen) {
 		append(&game.log, "Host Is Connected!");
 		page^ = .Gameplay;
 	}
+	time.sleep(1000000);
 }
 
 // Store each key character here and the ability to press backspace to remove last character
@@ -208,6 +209,7 @@ InputJoinMenu :: proc(s: ^t.Screen, page: ^Page, key: Maybe(t.Key)) {
 		client_key_buffer[client_key_pressed_num] = pressed_key;
 		client_key_pressed_num += 1;
 	}
+	time.sleep(1000000);
 }
 
 DrawGameplay :: proc(p: Player, s: ^t.Screen) {

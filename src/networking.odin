@@ -4,7 +4,7 @@ import "core:fmt"
 import "core:net"
 import "core:strconv"
 import "core:strings"
-import "core:slice"
+import "core:time"
 
 PlaceShipCommand :: struct {
   ship_type: int, // 0-4
@@ -84,13 +84,6 @@ ExecuteCommand :: proc(com: Command, p1,p2: ^Player, input_player: int) -> Error
 	return .NONE;
 }
 
-/*
-	When sending the string input as bytes to the other player,
-	execute that command as the other player by passing 2 in the input_player
-
-	and sync game_log if needed in both players
-*/
-
 PORT :: 8080;
 endpoint: net.Endpoint;
 
@@ -116,13 +109,6 @@ GetRadminVpnIp :: proc() -> net.IP4_Address{
 
 	return {};
 }
-
-// CheckIfKeyIpIsCorrect :: proc(key_ip: net.IP4_Address) -> bool {
-// 	radmin_ip := GetRadminVpnIp();
-
-// 	if (key_ip == radmin_ip) {return true}
-// 	return false;
-// }
 
 EncodeIP4 :: proc(ip: net.IP4_Address) -> string {
  k: [4]string;
@@ -164,7 +150,7 @@ HostClientSendCommand :: proc(input: [dynamic]string) {
 }
 
 UserType :: enum {Host, Client}
-user_type: UserType;
+user_type: UserType = nil;
 
 // Recives the sent data from the Host/Client and then run it as a command
 UpdateNetworking :: proc(page: Page, p1,p2:^Player) {
@@ -181,6 +167,9 @@ UpdateNetworking :: proc(page: Page, p1,p2:^Player) {
 		for i in str_input {
 			append(&input, i);
 		}
+	}
+	else {
+		time.sleep(1000000);
 	}
 
 	if (len(input) != 0) {

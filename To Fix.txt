@@ -1,0 +1,14 @@
+Use Mouse input for placing ships and selecting a hit tile instead of keyboard:
+  termcl supports mouse input but you don't make use of it nor do you provide an interactive way of placing your battleships, so it's kinda painful to read and input the coordinates
+
+Local Multiplayer:
+  having to use a VPN to test the game was a very mild annoyance, it would be nice if I could just use local ports
+
+Resizing the window:
+  you don't handle screen resizes, so if I changed my window size your game would become borked
+
+  you only use termcl.Screen but you could also use termcl.Window which is an isolated window inside your terminal that you could move around when the screen size changes or whatever
+
+
+Preformance: (Almost Fixed)
+  opening your program causes my fans to get loud. I think you probably would want to limit framerate or block on read to avoid using too many resources
