@@ -1,7 +1,5 @@
 package battleship
 
-import "core:fmt"
-
 Error :: enum {
   NONE,
   OUT_OF_RANGE,
@@ -26,6 +24,7 @@ GamePhase :: enum {None, Placing_Ships, Battle, GameOver}
 InputStep :: enum {
 	None,
   SelectShip,
+  SelectTile,
   SelectX,
   SelectY,
   SelectOrientation,

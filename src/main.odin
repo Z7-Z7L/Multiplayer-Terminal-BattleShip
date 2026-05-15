@@ -13,6 +13,48 @@ game: GameState;
 
 Page :: enum {MainMenu, RadminHostMenu, RadminJoinMenu, LocalHostMenu, LocalJoinMenu, Gameplay}
 
+// Based on the mouse position and game phase it will either use the ocean_board or target_board
+GetTilePosFromMouse :: proc(s: ^t.Screen, mouse: t.Mouse_Input) -> Position {
+	if (mouse.key == .Left && .Pressed in mouse.event) {
+		if (game.phase == .Placing_Ships) {
+			// Check if the mouse is inside the ocean_grid and then get the tile pos to place the ship
+			// first tile x:3, y:5
+			// last tile x:21, y:14
+
+			if (mouse.coord.x >= 3 && mouse.coord.x <= 21) {
+				if (mouse.coord.y >= 5 && mouse.coord.y <= 14) {
+					// Convert the pos from screen to tile pos, Example(3,5 -> 0,0)
+					t_: Position = {int(mouse.coord.x) - 3, int(mouse.coord.y) - 5};
+					if (t_.x % 2 == 1) {return {-1,-1}}
+					if (t_.x >= 2) {t_.x = t_.x/2}
+
+					return t_;
+				}
+			}
+
+		}
+		else if (game.phase == .Battle) {
+			// Check if the mouse is inside the target_grid and then get the tile pos to hit
+			// first tile x:40, y:5
+			// last tile x:58, y:14
+
+			if (mouse.coord.x >= 40 && mouse.coord.x <= 58) {
+				if (mouse.coord.y >= 5 && mouse.coord.y <= 14) {
+					// Convert the pos from screen to tile pos, Example(40,58 -> 0,0)
+					t_: Position = {int(mouse.coord.x) - 40, int(mouse.coord.y) - 5};
+					if (t_.x % 2 == 1) {return {-1,-1}}
+					if (t_.x >= 2) {t_.x = t_.x/2}
+
+					return t_;
+				}
+			}
+		}
+	}
+
+	return {-1,-1};
+}
+
+
 main :: proc() {
 	game.current_player = .Player1;
 
@@ -24,19 +66,31 @@ main :: proc() {
 	s := t.init_screen(tb.VTABLE);
 	defer t.destroy_screen(&s);
 
-	t.set_term_mode(&s, .Cbreak);
+	t.set_term_mode(&s, .Raw);
+
+	mouse_input: t.Mouse_Input;
+	cursor_bg: t.Any_Color;
+
+	selected_ship: Ships;
 
 	for {
 		t.hide_cursor(true)
 		t.clear(&s, .Everything);
 		defer t.blit(&s);
 
-		input, input_ok := t.read(&s).(t.Keyboard_Input);
+		raw_input, has_raw_input := tb.read_raw(&s);
+
+		// input, input_ok := t.read(&s).(t.Keyboard_Input);
+		input, input_ok := tb.parse_keyboard_input(raw_input);
 		if (input_ok && input.key == .Escape) {break}
+
+
+		m_input, mouse_has_input := tb.parse_mouse_input(raw_input);
+		if (mouse_has_input) {mouse_input = m_input;}
 
 		switch page {
 			case .MainMenu: {
-				InputMainMenu(&s, &page, input_ok ? input.key : .None);
+				InputMainMenu(&s, &page, mouse_input);
 				DrawMainMenu(&s);
 			}
 			case .RadminHostMenu: {
@@ -64,11 +118,11 @@ main :: proc() {
 			case .Gameplay: {
 				if (game.phase == .Battle) {
 					if ((game.current_player == .Player1 && user_type == .Host) || (game.current_player == .Player2 && user_type == .Client)) {
-						InputGameplay(&s, &p1,&p2, input_ok ? input.key : .None);
+						InputGameplay(&s, &p1,&p2, mouse_input, input_ok ? input.key : .None);
 					}
 				}
 				else {
-					InputGameplay(&s, &p1,&p2, input_ok ? input.key : .None);
+					InputGameplay(&s, &p1,&p2, mouse_input, input_ok ? input.key : .None);
 				}
 
 				UpdateNetworking(page, &p1,&p2);
@@ -77,6 +131,15 @@ main :: proc() {
 				else {DrawGameplay(p2, &s);}
 			}
 		}
+
+		if (mouse_input.key == .Left && .Pressed in mouse_input.event) {cursor_bg = nil;}
+		else {cursor_bg = .White}
+
+		t.set_color_style(&s, nil, cursor_bg);
+		t.move_cursor(&s, mouse_input.coord.y, mouse_input.coord.x);
+		t.write(&s, " ");
+
+		t.reset_styles(&s);
 	}
 }
 
@@ -91,29 +154,31 @@ DrawMainMenu :: proc(s: ^t.Screen) {
 	// Host & Join Options
 	t.set_color_style(s, .Blue, nil);
 	t.move_cursor(s, 1, 0);
-	t.write(s, "1: Radmin Host");
+	t.write(s, "Radmin Host");
 
 	t.set_color_style(s, .Cyan, nil);
 	t.move_cursor(s, 2, 0);
-	t.write(s, "2: Radmin Join");
+	t.write(s, "Radmin Join");
 
 	t.set_color_style(s, ORANGE_COLOR, nil);
 	t.move_cursor(s, 3, 0);
-	t.write(s, "3: Local Host");
+	t.write(s, "Local Host");
 
 	t.set_color_style(s, .Yellow, nil);
 	t.move_cursor(s, 4, 0);
-	t.write(s, "4: Local Join");
+	t.write(s, "Local Join");
 
 	t.reset_styles(s);
 }
-InputMainMenu :: proc(s: ^t.Screen, page: ^Page, key: Maybe(t.Key)) {
-	k, ok := key.?;
 
-	if (key == .Num_1) {page^ = .RadminHostMenu}
-	if (key == .Num_2) {page^ = .RadminJoinMenu}
-	if (key == .Num_3) {page^ = .LocalHostMenu}
-	if (key == .Num_4) {page^ = .LocalJoinMenu}
+InputMainMenu :: proc(s: ^t.Screen, page: ^Page, mouse: t.Mouse_Input) {
+	if (mouse.key == .Left && .Pressed in mouse.event) {
+		if (mouse.coord.y == 1 && mouse.coord.x <= 10) {page^ = .RadminHostMenu;}
+		if (mouse.coord.y == 2 && mouse.coord.x <= 10) {page^ = .RadminJoinMenu;}
+		if (mouse.coord.y == 3 && mouse.coord.x <= 9) {page^ = .LocalHostMenu;}
+		if (mouse.coord.y == 4 && mouse.coord.x <= 9) {page^ = .LocalJoinMenu;}
+	}
+
 	time.sleep(1000000);
 }
 
@@ -315,6 +380,12 @@ UpdateLocalJoinMenu :: proc(s: ^t.Screen, page: ^Page) {
 	time.sleep(1000000);
 }
 
+Carrier_bg:    t.Any_Color;
+Battleship_bg: t.Any_Color;
+Cruiser_bg:    t.Any_Color;
+Submarine_bg:  t.Any_Color;
+Destroyer_bg:  t.Any_Color;
+
 DrawGameplay :: proc(p: Player, s: ^t.Screen) {
 	t.set_text_style(s, {.Bold})
 
@@ -350,9 +421,45 @@ DrawGameplay :: proc(p: Player, s: ^t.Screen) {
 		for row, i in p.ocean_grid {
 			t.move_cursor(s, uint(i + 5), 3)
 
-			for r, _ in row {
+			for r, j in row {
 				if (r == WATER) {t.set_color_style(s, .Blue, nil)}
-				if (r == SHIP) {t.set_color_style(s, .Green, nil)}
+				if (r == SHIP) {
+					for pp, _ship in p.ships {
+						switch pp {
+							case .Carrier:
+								for _, _pos in _ship.tiles {
+									if (_pos == {j,i}) {
+										t.set_color_style(s, .Red, nil)
+									}
+								}
+							case .Battleship:
+								for _, _pos in _ship.tiles {
+									if (_pos == {j,i}) {
+										t.set_color_style(s, .Green, nil)
+									}
+								}
+							case .Cruiser:
+								for _, _pos in _ship.tiles {
+									if (_pos == {j,i}) {
+										t.set_color_style(s, .Yellow, nil)
+									}
+								}
+							case .Submarine:
+								for _, _pos in _ship.tiles {
+									if (_pos == {j,i}) {
+										t.set_color_style(s, ORANGE_COLOR, nil)
+									}
+								}
+							case .Destroyer:
+								for _, _pos in _ship.tiles {
+									if (_pos == {j,i}) {
+										t.set_color_style(s, .Magenta, nil)
+									}
+								}
+						}
+					}
+
+				}
 				if (r == HIT)  {t.set_color_style(s, .Yellow, nil)}
 				if (r == SUNK) {t.set_color_style(s, .Red, nil)}
 				if (r == MISS) {t.set_color_style(s, .Magenta, nil)}
@@ -445,32 +552,41 @@ DrawGameplay :: proc(p: Player, s: ^t.Screen) {
 
 		// Unplaced Ships
 		if (len(p.unplaced_ships) != 0) {
-			t.set_color_style(s, .Green, nil)
+			t.set_color_style(s, .White, nil)
 			t.move_cursor(s, 17, 0)
 			t.write(s, "Ships:")
 
-			ship_names := [Ships]cstring {
-				.Carrier    = "Carrier",
-				.Battleship = "Battleship",
-				.Cruiser    = "Cruiser",
-				.Submarine  = "Submarine",
-				.Destroyer  = "Destroyer",
+			for _ship in p.unplaced_ships {
+				switch _ship {
+					case .Carrier: {
+						t.set_color_style(s, .Red, Carrier_bg);
+						t.move_cursor(s, 18, 0);
+						t.writef(s, " %s (len: %i)", Ships.Carrier, p.ships[.Carrier].length);
+					}
+					case .Battleship: {
+						t.set_color_style(s, .Green, Battleship_bg);
+						t.move_cursor(s, 19, 0);
+						t.writef(s, " %s (len: %i)", Ships.Battleship, p.ships[.Battleship].length);
+					}
+					case .Cruiser: {
+						t.set_color_style(s, .Yellow, Cruiser_bg);
+						t.move_cursor(s, 20, 0);
+						t.writef(s, " %s (len: %i)", Ships.Cruiser, p.ships[.Cruiser].length);
+					}
+					case .Submarine: {
+						t.set_color_style(s, ORANGE_COLOR, Submarine_bg);
+						t.move_cursor(s, 21, 0);
+						t.writef(s, " %s (len: %i)", Ships.Submarine, p.ships[.Submarine].length);
+					}
+					case .Destroyer: {
+						t.set_color_style(s, .Magenta, Destroyer_bg);
+						t.move_cursor(s, 22, 0);
+						t.writef(s, " %s (len: %i)", Ships.Destroyer, p.ships[.Destroyer].length);
+					}
+				}
 			}
 
-			_line: uint = 18
-			for ship_type, i in p.unplaced_ships {
-				t.move_cursor(s, _line, 0)
-				text := fmt.aprintf(
-					"%i: %s (len: %i)",
-					i,
-					ship_names[ship_type],
-					p.ships[ship_type].length,
-				)
-				t.write(s, text)
-				_line += 1
-			}
 		}
-
 
 		// Turn number and Current Player Turn
 		t.set_color_style(s, .Yellow, nil)
@@ -509,21 +625,15 @@ DrawGameplay :: proc(p: Player, s: ^t.Screen) {
 			t.move_cursor(s, 24, 0);
 
 			#partial switch game.input_step {
-				case .SelectShip: t.write(s, "Select a Ship(0-4):");
-				case .SelectX: t.write(s, "Select X Position(0-9):");
-				case .SelectY: t.write(s, "Select Y Position(0-9):");
+				case .SelectShip: t.write(s, "Select a Ship");
+				case .SelectTile: t.write(s, "Select a Tile");
 				case .SelectOrientation: t.write(s, "Select Ship Rotation(H-V):");
 			}
 		}
 		else if (game.phase == .Battle && (user_type == .Host && game.current_player == .Player1) || (user_type == .Client && game.current_player == .Player2)) {
 			t.set_color_style(s, ORANGE_COLOR, nil);
 			t.move_cursor(s, 17, 0);
-			t.write(s, "Enter Coordinates To Fire!")
-			t.move_cursor(s, 18, 0);
-			#partial switch game.input_step {
-				case .SelectX: t.write(s, "Select X Position(0-9):");
-				case .SelectY: t.write(s, "Select Y Position(0-9):");
-			}
+			t.write(s, "Target a tile to fire!")
 		}
 
 		// Game Log
@@ -561,7 +671,8 @@ DrawGameplay :: proc(p: Player, s: ^t.Screen) {
 
 	t.reset_styles(s)
 }
-InputGameplay :: proc(s: ^t.Screen, p1,p2: ^Player, key: Maybe(t.Key)) {
+
+InputGameplay :: proc(s: ^t.Screen, p1,p2: ^Player, mouse: t.Mouse_Input, key: Maybe(t.Key)) {
 	if (len(p1.unplaced_ships) != 0 && game.phase != .Placing_Ships) {
 		game.phase = .Placing_Ships;
 		game.input_step = .SelectShip;
@@ -569,39 +680,63 @@ InputGameplay :: proc(s: ^t.Screen, p1,p2: ^Player, key: Maybe(t.Key)) {
 
 	if (game.phase == .Placing_Ships) {
 		if (len(p1.unplaced_ships) == 0 && len(p2.unplaced_ships) == 0) {
-			game.input_step = .SelectX;
 			game.phase = .Battle;
 		}
 
+		t_pos := GetTilePosFromMouse(s, mouse);
+
 		k, ok := key.?;
-		if !ok || game.phase != .Placing_Ships { return }
 
 		val := KeyToString(k);
-		if val == "" {return}
-
-		if (len(p1.unplaced_ships) != 0 && user_type == .Client && len(p2.unplaced_ships) == 0) {
-			append(&game.log, "Player1 is still placeing his ships.");
-			return
-		}
-		else if (len(p2.unplaced_ships) != 0 && user_type == .Host && len(p1.unplaced_ships) == 0) {
-			append(&game.log, "Player2 is still placeing his ships.");
-			return
-		}
-
-
 
 		#partial switch game.input_step {
 			case .SelectShip:
-				append(&game.buffer, val);
-				game.input_step = .SelectX;
-			case .SelectX:
-				append(&game.buffer, val);
-				game.input_step = .SelectY;
-			case .SelectY:
-				append(&game.buffer, val);
-				game.input_step = .SelectOrientation;
+				if (mouse.key == .Left && .Pressed in mouse.event) {
+					switch mouse.coord.y {
+						case 18:
+							append(&game.buffer, fmt.tprint(0));
+							game.input_step = .SelectTile;
+							Carrier_bg = .White;
+						case 19:
+							append(&game.buffer, fmt.tprint(1));
+							game.input_step = .SelectTile;
+							Battleship_bg = .White;
+						case 20:
+							append(&game.buffer, fmt.tprint(2));
+							game.input_step = .SelectTile;
+							Cruiser_bg = .White;
+						case 21:
+							append(&game.buffer, fmt.tprint(3));
+							game.input_step = .SelectTile;
+							Submarine_bg = .White;
+						case 22:
+							append(&game.buffer, fmt.tprint(4));
+							game.input_step = .SelectTile;
+							Destroyer_bg = .White;
+					}
+				}
+
+				if (mouse.key == .Left && .Pressed in mouse.event || val != "") {
+					if (len(p1.unplaced_ships) != 0 && user_type == .Client && len(p2.unplaced_ships) == 0) {
+						append(&game.log, "Player1 is still placeing his ships.");
+						game.input_step = .None;
+					}
+					else if (len(p2.unplaced_ships) != 0 && user_type == .Host && len(p1.unplaced_ships) == 0) {
+						append(&game.log, "Player2 is still placeing his ships.");
+						game.input_step = .None;
+					}
+				}
+			case .SelectTile:
+				if (t_pos != {-1,-1}) {
+					append(&game.buffer, fmt.tprint(t_pos.x));
+					append(&game.buffer, fmt.tprint(t_pos.y));
+
+					game.input_step = .SelectOrientation;
+				}
 			case .SelectOrientation:
-				append(&game.buffer, val);
+				if (val != "") {
+					append(&game.buffer, val);
+				}
 
 				// Create & Execute Command
 				if (len(game.buffer) == 4) {
@@ -610,73 +745,73 @@ InputGameplay :: proc(s: ^t.Screen, p1,p2: ^Player, key: Maybe(t.Key)) {
 						err := ExecuteCommand(com, p1,p2, 1);
 						if (err != .NONE) {
 							append(&game.log, fmt.aprint(err));
+							Carrier_bg = nil;
+							Battleship_bg = nil;
+							Cruiser_bg = nil;
+							Submarine_bg = nil;
+							Destroyer_bg = nil;
 						}
 						else if (err == .NONE || err == nil) {
 							HostClientSendCommand(game.buffer);
 						}
+						game.input_step = .SelectShip;
 					}
 					else {
 						err := ExecuteCommand(com, p1,p2, 2);
 						if (err != .NONE) {
 							append(&game.log, fmt.aprint(err));
+							Carrier_bg = nil;
+							Battleship_bg = nil;
+							Cruiser_bg = nil;
+							Submarine_bg = nil;
+							Destroyer_bg = nil;
 						}
 						else if (err == .NONE || err == nil) {
 							HostClientSendCommand(game.buffer);
 						}
+						game.input_step = .SelectShip;
 					}
-					game.input_step = .SelectX;
+
 					clear(&game.buffer);
 				}
 
 				if (len(p1.unplaced_ships) == 0 && len(p2.unplaced_ships) == 0) {
 					game.phase = .Battle;
 				}
-				else {
-					game.input_step = .SelectX;
-					game.input_step = .SelectShip;
-				}
 		}
 
 	}
 	else if (game.phase == .Battle) {
-		k, ok := key.?;
-		if !ok || game.phase != .Battle { return }
+		t_pos := GetTilePosFromMouse(s, mouse);
 
-		val := KeyToString(k);
-		if val == "" {return}
+		if (t_pos != {-1,-1}) {
+			append(&game.buffer, fmt.tprint(t_pos.x));
+			append(&game.buffer, fmt.tprint(t_pos.y));
 
-		#partial switch game.input_step {
-			case .SelectX:
-				append(&game.buffer, val);
-				game.input_step = .SelectY;
-			case .SelectY:
-				append(&game.buffer, val);
-
-				// Create & Execute Command
-				com := CreateCommand(game.buffer);
-				if (user_type == .Host) {
-					err := ExecuteCommand(com, p1,p2, 1);
-					if (err != .NONE) {
-						append(&game.log, fmt.aprint(err));
-					}
-					else if (err == .NONE || err == nil) {
-						HostClientSendCommand(game.buffer);
-					}
+			// Create & Execute Command
+			com := CreateCommand(game.buffer);
+			if (user_type == .Host) {
+				err := ExecuteCommand(com, p1,p2, 1);
+				if (err != .NONE) {
+					append(&game.log, fmt.aprint(err));
 				}
-				else {
-					err := ExecuteCommand(com, p1,p2, 2);
-					if (err != .NONE) {
-						append(&game.log, fmt.aprint(err));
-					}
-					else if (err == .NONE || err == nil) {
-						HostClientSendCommand(game.buffer);
-					}
+				else if (err == .NONE || err == nil) {
+					HostClientSendCommand(game.buffer);
 				}
+			}
+			else {
+				err := ExecuteCommand(com, p1,p2, 2);
+				if (err != .NONE) {
+					append(&game.log, fmt.aprint(err));
+				}
+				else if (err == .NONE || err == nil) {
+					HostClientSendCommand(game.buffer);
+				}
+			}
 
-				clear(&game.buffer);
-
-				game.input_step = .SelectX;
+			clear(&game.buffer);
 		}
+
 	}
 }
 
